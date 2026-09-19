@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:16-alpine
+    container_name: portal_pembekalan_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: portal_pembekalan
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d portal_pembekalan"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Web Application Service (Full-Stack React + Express Backend)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portal_pembekalan_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=portal_pembekalan
+      - PGUSER=postgres
+      - PGPASSWORD=postgres_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
