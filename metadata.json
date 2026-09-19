@@ -2,5 +2,7 @@
   "name": "Sistem Monitoring & Pembekalan Mahasiswa",
   "description": "Aplikasi manajemen data mahasiswa, referensi kelas pembekalan & cetak PDF jadwal, live monitoring login hari ini, monitoring tugas persesi mahasiswa via ingest sistem eksternal, dan riwayat akses dengan PostgreSQL.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
