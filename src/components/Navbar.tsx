@@ -9,6 +9,7 @@ interface NavbarProps {
 
 interface DbStatus {
   isPostgresConnected: boolean;
+  isDbInitialized?: boolean;
   mode: string;
   host?: string;
   port?: number;
@@ -148,14 +149,25 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
                     Portal Pembekalan
                   </span>
                   {dbStatus?.isPostgresConnected ? (
-                    <span
-                      id="db-badge-connected"
-                      className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      title={`Terhubung ke PostgreSQL (${dbStatus.host}:${dbStatus.port || 5432}/${dbStatus.database})`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      PostgreSQL: Live
-                    </span>
+                    dbStatus?.isDbInitialized ? (
+                      <span
+                        id="db-badge-connected"
+                        className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        title={`Terhubung ke PostgreSQL (${dbStatus.host}:${dbStatus.port || 5432}/${dbStatus.database}) - Aman: Data pengguna terjaga (Tanpa Auto-Init)`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        PostgreSQL: Live
+                      </span>
+                    ) : (
+                      <span
+                        id="db-badge-need-init"
+                        className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200"
+                        title="Database terhubung. Belum diinisiasi. Inisiasi manual dari luar docker dengan: docker compose exec db psql -U ${PGUSER} -d ${PGDATABASE} -f /init.sql"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                        PostgreSQL: Siap Inisiasi
+                      </span>
+                    )
                   ) : (
                     <span
                       id="db-badge-fallback"

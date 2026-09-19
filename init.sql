@@ -114,20 +114,18 @@ INSERT INTO kelas_pembekalan (id, nama_kelas, deskripsi, kuota) VALUES
 (4, 'Mobile Application Development', 'Pengembangan aplikasi mobile multiplatform dengan arsitektur reaktif', 35)
 ON CONFLICT (id) DO NOTHING;
 
--- Seed Sesi Pembekalan Fleksibel
-INSERT INTO sesi_pembekalan (kelas_pembekalan_id, nama_sesi, hari, jam_mulai, jam_selesai, ruangan, instruktur) VALUES
-(1, 'Sesi 1: Dasar REST API & Database Design', 'Senin', '08:00', '10:00', 'Lab Komputer 1', 'Dr. Ir. Hendra Wijaya, M.Kom'),
-(1, 'Sesi 2: Frontend Architecture & Tailwind', 'Rabu', '10:15', '12:15', 'Lab Komputer 1', 'Ahmad Fauzi, S.Kom, M.T'),
-(1, 'Sesi 3: Docker Container & Deployment CI/CD', 'Jumat', '13:30', '15:30', 'Lab Komputer 3', 'Rian Pratama, M.Sc'),
-
-(2, 'Sesi 1: Python Data Wrangling & Pandas', 'Selasa', '08:00', '10:00', 'Lab Riset AI', 'Prof. Siti Nurhaliza, Ph.D'),
-(2, 'Sesi 2: Supervised & Unsupervised ML Models', 'Kamis', '13:00', '15:00', 'Lab Riset AI', 'Budi Santoso, M.Kom'),
-
-(3, 'Sesi 1: Network Traffic Analysis & Wireshark', 'Senin', '10:30', '12:30', 'Lab Jaringan', 'Eko Prasetyo, CEH'),
-(3, 'Sesi 2: Web Exploitation & SQL Injection Prevention', 'Kamis', '08:00', '10:00', 'Lab Jaringan', 'Dian Anggraini, OSCP'),
-
-(4, 'Sesi 1: Cross-Platform UI Component & State Management', 'Rabu', '08:00', '10:00', 'Lab Multimedia', 'Kevin Susanto, S.T'),
-(4, 'Sesi 2: API Integration & Offline SQLite Sync', 'Sabtu', '09:00', '11:00', 'Lab Multimedia', 'Kevin Susanto, S.T');
+-- Seed Sesi Pembekalan Fleksibel (ON CONFLICT DO NOTHING agar data pengguna tidak tertimpa)
+INSERT INTO sesi_pembekalan (id, kelas_pembekalan_id, nama_sesi, hari, jam_mulai, jam_selesai, ruangan, instruktur) VALUES
+(1, 1, 'Sesi 1: Dasar REST API & Database Design', 'Senin', '08:00', '10:00', 'Lab Komputer 1', 'Dr. Ir. Hendra Wijaya, M.Kom'),
+(2, 1, 'Sesi 2: Frontend Architecture & Tailwind', 'Rabu', '10:15', '12:15', 'Lab Komputer 1', 'Ahmad Fauzi, S.Kom, M.T'),
+(3, 1, 'Sesi 3: Docker Container & Deployment CI/CD', 'Jumat', '13:30', '15:30', 'Lab Komputer 3', 'Rian Pratama, M.Sc'),
+(4, 2, 'Sesi 1: Python Data Wrangling & Pandas', 'Selasa', '08:00', '10:00', 'Lab Riset AI', 'Prof. Siti Nurhaliza, Ph.D'),
+(5, 2, 'Sesi 2: Supervised & Unsupervised ML Models', 'Kamis', '13:00', '15:00', 'Lab Riset AI', 'Budi Santoso, M.Kom'),
+(6, 3, 'Sesi 1: Network Traffic Analysis & Wireshark', 'Senin', '10:30', '12:30', 'Lab Jaringan', 'Eko Prasetyo, CEH'),
+(7, 3, 'Sesi 2: Web Exploitation & SQL Injection Prevention', 'Kamis', '08:00', '10:00', 'Lab Jaringan', 'Dian Anggraini, OSCP'),
+(8, 4, 'Sesi 1: Cross-Platform UI Component & State Management', 'Rabu', '08:00', '10:00', 'Lab Multimedia', 'Kevin Susanto, S.T'),
+(9, 4, 'Sesi 2: API Integration & Offline SQLite Sync', 'Sabtu', '09:00', '11:00', 'Lab Multimedia', 'Kevin Susanto, S.T')
+ON CONFLICT (id) DO NOTHING;
 
 -- Seed Data Mahasiswa
 INSERT INTO mahasiswa (npm, nama, kelas, kelas_pembekalan_id) VALUES

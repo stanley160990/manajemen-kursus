@@ -210,15 +210,33 @@ Digunakan untuk sinkronisasi berkala (misalnya melalui cron job harian atau sink
 
 ## 🐳 Menjalankan dengan Docker Compose
 
-Untuk menjalankan aplikasi lengkap beserta database PostgreSQL secara terisolasi:
+Untuk menjalankan aplikasi lengkap beserta database PostgreSQL:
 
 ```bash
-docker compose up --build -d
+docker compose up -d --build
 ```
 
 - **Aplikasi Web:** Buka [http://localhost:3000](http://localhost:3000)
 - **Database PostgreSQL:** Port `5432`, Database: `portal_pembekalan`, User: `postgres`, Password: `postgres_password`.
-- Skema tabel diinisialisasi otomatis dari file `init.sql`.
+- **Keamanan Data:** Setiap kali menjalankan `docker compose up -d --build`, database **TIDAK diinisiasi otomatis** sehingga data yang telah diinput pengguna tetap terjaga dan tidak akan terhapus atau tertimpa.
+
+### 🛠️ Inisiasi Database Secara Manual (Dilakukan dari Luar Docker)
+
+Inisiasi tabel dan schema awal hanya dilakukan satu kali atau saat dibutuhkan melalui perintah `docker compose exec`:
+
+**Pilihan 1 (Direkomendasikan - via Node CLI Script):**
+```bash
+docker compose exec app npm run db:init
+```
+
+**Pilihan 2 (Langsung via PostgreSQL Client):**
+```bash
+docker compose exec db psql -U postgres -d portal_pembekalan -f /init.sql
+```
+
+> **Catatan Keamanan:** 
+> - Perintah inisiasi manual di atas menggunakan klausul `ON CONFLICT DO NOTHING`, sehingga aman dijalankan kembali kapan pun tanpa khawatir menimpa data yang telah ada.
+> - Kata sandi akun pengguna disimpan menggunakan mekanisme enkripsi hash **SHA-1**.
 
 Untuk mematikan container:
 ```bash
