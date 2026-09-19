@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import * as XLSX from 'xlsx';
 import { createServer as createViteServer } from 'vite';
 import {
@@ -22,9 +21,6 @@ import {
   simulateExternalTaskSubmission,
   memoryStore,
 } from './src/db/db.ts';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
