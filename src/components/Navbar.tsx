@@ -1,15 +1,45 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types.ts';
-import { LogOut, Shield, UserCheck, Clock, Calendar } from 'lucide-react';
+import { LogOut, Shield, UserCheck, Clock, Calendar, Database, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface NavbarProps {
   user: User;
   onLogout: () => void;
 }
 
+interface DbStatus {
+  isPostgresConnected: boolean;
+  mode: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  lastError?: string | null;
+}
+
 export const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDate, setCurrentDate] = useState<string>('');
+  const [dbStatus, setDbStatus] = useState<DbStatus | null>(null);
+
+  useEffect(() => {
+    const fetchDbStatus = async () => {
+      try {
+        const res = await fetch('/api/health');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.database) {
+            setDbStatus(data.database);
+          }
+        }
+      } catch {
+        // silent
+      }
+    };
+
+    fetchDbStatus();
+    const dbInterval = setInterval(fetchDbStatus, 8000);
+    return () => clearInterval(dbInterval);
+  }, []);
 
   useEffect(() => {
     const updateTime = () => {
@@ -32,28 +62,60 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 w-full bg-white border-b border-slate-200/80 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Brand Logo & Title */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#525FE1] flex items-center justify-center text-white font-black text-lg shadow-sm">
-              P
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-slate-900 tracking-tight text-base sm:text-lg">
-                  Portal Pembekalan
-                </span>
-                <span className="hidden sm:inline-block text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#EEF0FD] text-[#525FE1] border border-[#D0D5FA]">
-                  PostgreSQL
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 hidden md:block">
-                Manajemen Mahasiswa & Live Monitoring Sesi
-              </p>
-            </div>
+    <>
+      {/* Database Warning Banner if Disconnected / Fallback */}
+      {dbStatus && !dbStatus.isPostgresConnected && (
+        <div className="bg-amber-500 text-white px-4 py-2 text-xs font-medium flex flex-wrap items-center justify-between gap-2 shadow-inner">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-100 shrink-0" />
+            <span>
+              <strong>Peringatan Database:</strong> PostgreSQL belum terhubung ({dbStatus.lastError || 'koneksi ditolak'}). Aplikasi saat ini berjalan dalam <em>mode memori sementara</em>, sehingga perubahan belum tersimpan permanen di database PostgreSQL server.
+            </span>
           </div>
+          <span className="text-[11px] bg-amber-700/60 px-2.5 py-0.5 rounded font-mono text-amber-100 border border-amber-400/40">
+            Periksa PGHOST=db di docker-compose.yml
+          </span>
+        </div>
+      )}
+
+      <header className="sticky top-0 z-30 w-full bg-white border-b border-slate-200/80 shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Brand Logo & Title */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#525FE1] flex items-center justify-center text-white font-black text-lg shadow-sm">
+                P
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-extrabold text-slate-900 tracking-tight text-base sm:text-lg">
+                    Portal Pembekalan
+                  </span>
+                  {dbStatus?.isPostgresConnected ? (
+                    <span
+                      id="db-badge-connected"
+                      className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      title={`Terhubung ke PostgreSQL (${dbStatus.host}:${dbStatus.port || 5432}/${dbStatus.database})`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      PostgreSQL: Live
+                    </span>
+                  ) : (
+                    <span
+                      id="db-badge-fallback"
+                      className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300"
+                      title={dbStatus?.lastError ? `Gagal terhubung: ${dbStatus.lastError}` : 'PostgreSQL terputus. Mode memori aktif.'}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      PostgreSQL: Terputus
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 hidden md:block">
+                  Manajemen Mahasiswa & Live Monitoring Sesi
+                </p>
+              </div>
+            </div>
 
           {/* Center: Live Date & Clock */}
           <div className="hidden lg:flex items-center gap-4 py-1.5 px-3.5 bg-slate-50 border border-slate-200/70 rounded-xl text-xs text-slate-600">
@@ -110,5 +172,6 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onLogout }) => {
         </div>
       </div>
     </header>
+    </>
   );
 };

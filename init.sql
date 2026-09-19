@@ -23,13 +23,18 @@ CREATE TABLE IF NOT EXISTS sesi_pembekalan (
     id SERIAL PRIMARY KEY,
     kelas_pembekalan_id INT NOT NULL REFERENCES kelas_pembekalan(id) ON DELETE CASCADE,
     nama_sesi VARCHAR(150) NOT NULL,
+    tanggal VARCHAR(30),
     hari VARCHAR(30) NOT NULL,
     jam_mulai VARCHAR(10) NOT NULL,
     jam_selesai VARCHAR(10) NOT NULL,
     ruangan VARCHAR(100),
     instruktur VARCHAR(150),
+    asisten JSONB DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE sesi_pembekalan ADD COLUMN IF NOT EXISTS tanggal VARCHAR(30);
+ALTER TABLE sesi_pembekalan ADD COLUMN IF NOT EXISTS asisten JSONB DEFAULT '[]';
 
 CREATE TABLE IF NOT EXISTS mahasiswa (
     id SERIAL PRIMARY KEY,
@@ -133,3 +138,9 @@ INSERT INTO mahasiswa (npm, nama, kelas, kelas_pembekalan_id) VALUES
 ('50421011', 'Kartika Dewi', '4IA06', 1),
 ('50421012', 'Lukman Hakim', '4IA06', 3)
 ON CONFLICT (npm) DO NOTHING;
+
+-- Sinkronisasi sequence auto-increment ID agar insert baru tidak conflict
+SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1));
+SELECT setval('kelas_pembekalan_id_seq', COALESCE((SELECT MAX(id) FROM kelas_pembekalan), 1));
+SELECT setval('sesi_pembekalan_id_seq', COALESCE((SELECT MAX(id) FROM sesi_pembekalan), 1));
+SELECT setval('mahasiswa_id_seq', COALESCE((SELECT MAX(id) FROM mahasiswa), 1));

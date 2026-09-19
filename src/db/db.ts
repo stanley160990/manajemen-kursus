@@ -15,19 +15,20 @@ const { Pool } = pg;
 
 // Konfigurasi koneksi PostgreSQL
 const poolConfig: pg.PoolConfig = {
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL || undefined,
   host: process.env.PGHOST || process.env.SQL_HOST || 'localhost',
   port: parseInt(process.env.PGPORT || process.env.SQL_PORT || '5432', 10),
   database: process.env.PGDATABASE || process.env.SQL_DB_NAME || 'pembekalan_db',
   user: process.env.PGUSER || process.env.SQL_USER || 'postgres',
   password: process.env.PGPASSWORD || process.env.SQL_PASSWORD || 'postgrespassword',
   max: 10,
-  connectionTimeoutMillis: 3000,
+  connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 10000,
 };
 
 let pool: pg.Pool | null = null;
 let isPostgresConnected = false;
+let lastDbError: string | null = null;
 
 // Seed Data Standar
 const initialUsers: User[] = [
@@ -344,150 +345,194 @@ generateInitialLogs();
 generateInitialTasks();
 
 // Initialize Database connection and tables
-export async function initializeDatabase() {
-  try {
-    pool = new Pool(poolConfig);
-    const client = await pool.connect();
-    console.log('✅ PostgreSQL connected successfully!');
-    isPostgresConnected = true;
+export async function initializeDatabase(retries = 4, delayMs = 1500) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`🔌 Menghubungkan ke PostgreSQL (${poolConfig.host}:${poolConfig.port}/${poolConfig.database}) [Percobaan ${attempt}/${retries}]...`);
+      if (!pool) {
+        pool = new Pool(poolConfig);
+      }
+      const client = await pool.connect();
+      console.log('✅ PostgreSQL connected successfully!');
+      isPostgresConnected = true;
+      lastDbError = null;
 
-    // Create tables if they don't exist
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        nama VARCHAR(100) NOT NULL,
-        role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'asisten')),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS kelas_pembekalan (
-        id SERIAL PRIMARY KEY,
-        nama_kelas VARCHAR(150) UNIQUE NOT NULL,
-        deskripsi TEXT,
-        kuota INT DEFAULT 40,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS sesi_pembekalan (
-        id SERIAL PRIMARY KEY,
-        kelas_pembekalan_id INT NOT NULL REFERENCES kelas_pembekalan(id) ON DELETE CASCADE,
-        nama_sesi VARCHAR(150) NOT NULL,
-        tanggal VARCHAR(30),
-        hari VARCHAR(30) NOT NULL,
-        jam_mulai VARCHAR(10) NOT NULL,
-        jam_selesai VARCHAR(10) NOT NULL,
-        ruangan VARCHAR(100),
-        instruktur VARCHAR(150),
-        asisten JSONB DEFAULT '[]',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      -- Migration safe checks
-      ALTER TABLE sesi_pembekalan ADD COLUMN IF NOT EXISTS asisten JSONB DEFAULT '[]';
-      ALTER TABLE sesi_pembekalan ADD COLUMN IF NOT EXISTS tanggal VARCHAR(30);
-
-      CREATE TABLE IF NOT EXISTS mahasiswa (
-        id SERIAL PRIMARY KEY,
-        npm VARCHAR(20) UNIQUE NOT NULL,
-        nama VARCHAR(150) NOT NULL,
-        kelas VARCHAR(20) NOT NULL,
-        kelas_pembekalan_id INT REFERENCES kelas_pembekalan(id) ON DELETE RESTRICT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE IF NOT EXISTS log_login_mahasiswa (
-        id SERIAL PRIMARY KEY,
-        mahasiswa_id INT REFERENCES mahasiswa(id) ON DELETE SET NULL,
-        npm VARCHAR(20) NOT NULL,
-        nama VARCHAR(150) NOT NULL,
-        kelas VARCHAR(20) NOT NULL,
-        nama_kelas_pembekalan VARCHAR(150) NOT NULL,
-        nama_sesi VARCHAR(150) NOT NULL,
-        waktu_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        waktu_logout TIMESTAMP,
-        durasi_menit INT DEFAULT 0,
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        status VARCHAR(20) DEFAULT 'login',
-        is_active_now BOOLEAN DEFAULT true
-      );
-
-      CREATE TABLE IF NOT EXISTS tugas_mahasiswa (
-        id SERIAL PRIMARY KEY,
-        mahasiswa_id INT REFERENCES mahasiswa(id) ON DELETE CASCADE,
-        npm VARCHAR(20) NOT NULL,
-        nama VARCHAR(150) NOT NULL,
-        kelas VARCHAR(20) NOT NULL,
-        kelas_pembekalan_id INT REFERENCES kelas_pembekalan(id) ON DELETE CASCADE,
-        nama_kelas_pembekalan VARCHAR(150) NOT NULL,
-        sesi_id INT REFERENCES sesi_pembekalan(id) ON DELETE SET NULL,
-        nama_sesi VARCHAR(150) NOT NULL,
-        judul_tugas VARCHAR(255) NOT NULL,
-        status VARCHAR(30) NOT NULL DEFAULT 'belum_mengumpulkan',
-        nilai NUMERIC(5,2),
-        waktu_pengumpulan TIMESTAMP,
-        deadline TIMESTAMP,
-        tautan_tugas TEXT,
-        catatan_instruktur TEXT,
-        external_source VARCHAR(100) DEFAULT 'External Ingest System',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // Seed default users if empty
-    const checkUsers = await client.query('SELECT COUNT(*) FROM users');
-    if (parseInt(checkUsers.rows[0].count, 10) === 0) {
+      // Create tables if they don't exist
       await client.query(`
-        INSERT INTO users (username, password, nama, role) VALUES 
-        ('admin', 'admin123', 'Administrator Pembekalan', 'admin'),
-        ('asisten', 'asisten123', 'Asisten Laboratorium', 'asisten')
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(50) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          nama VARCHAR(100) NOT NULL,
+          role VARCHAR(20) NOT NULL CHECK (role IN ('admin', 'asisten')),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS kelas_pembekalan (
+          id SERIAL PRIMARY KEY,
+          nama_kelas VARCHAR(150) UNIQUE NOT NULL,
+          deskripsi TEXT,
+          kuota INT DEFAULT 40,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS sesi_pembekalan (
+          id SERIAL PRIMARY KEY,
+          kelas_pembekalan_id INT NOT NULL REFERENCES kelas_pembekalan(id) ON DELETE CASCADE,
+          nama_sesi VARCHAR(150) NOT NULL,
+          tanggal VARCHAR(30),
+          hari VARCHAR(30) NOT NULL,
+          jam_mulai VARCHAR(10) NOT NULL,
+          jam_selesai VARCHAR(10) NOT NULL,
+          ruangan VARCHAR(100),
+          instruktur VARCHAR(150),
+          asisten JSONB DEFAULT '[]',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- Migration safe checks
+        ALTER TABLE sesi_pembekalan ADD COLUMN IF NOT EXISTS asisten JSONB DEFAULT '[]';
+        ALTER TABLE sesi_pembekalan ADD COLUMN IF NOT EXISTS tanggal VARCHAR(30);
+
+        CREATE TABLE IF NOT EXISTS mahasiswa (
+          id SERIAL PRIMARY KEY,
+          npm VARCHAR(20) UNIQUE NOT NULL,
+          nama VARCHAR(150) NOT NULL,
+          kelas VARCHAR(20) NOT NULL,
+          kelas_pembekalan_id INT REFERENCES kelas_pembekalan(id) ON DELETE RESTRICT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS log_login_mahasiswa (
+          id SERIAL PRIMARY KEY,
+          mahasiswa_id INT REFERENCES mahasiswa(id) ON DELETE SET NULL,
+          npm VARCHAR(20) NOT NULL,
+          nama VARCHAR(150) NOT NULL,
+          kelas VARCHAR(20) NOT NULL,
+          nama_kelas_pembekalan VARCHAR(150) NOT NULL,
+          nama_sesi VARCHAR(150) NOT NULL,
+          waktu_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          waktu_logout TIMESTAMP,
+          durasi_menit INT DEFAULT 0,
+          ip_address VARCHAR(45),
+          user_agent TEXT,
+          status VARCHAR(20) DEFAULT 'login',
+          is_active_now BOOLEAN DEFAULT true
+        );
+
+        CREATE TABLE IF NOT EXISTS tugas_mahasiswa (
+          id SERIAL PRIMARY KEY,
+          mahasiswa_id INT REFERENCES mahasiswa(id) ON DELETE CASCADE,
+          npm VARCHAR(20) NOT NULL,
+          nama VARCHAR(150) NOT NULL,
+          kelas VARCHAR(20) NOT NULL,
+          kelas_pembekalan_id INT REFERENCES kelas_pembekalan(id) ON DELETE CASCADE,
+          nama_kelas_pembekalan VARCHAR(150) NOT NULL,
+          sesi_id INT REFERENCES sesi_pembekalan(id) ON DELETE SET NULL,
+          nama_sesi VARCHAR(150) NOT NULL,
+          judul_tugas VARCHAR(255) NOT NULL,
+          status VARCHAR(30) NOT NULL DEFAULT 'belum_mengumpulkan',
+          nilai NUMERIC(5,2),
+          waktu_pengumpulan TIMESTAMP,
+          deadline TIMESTAMP,
+          tautan_tugas TEXT,
+          catatan_instruktur TEXT,
+          external_source VARCHAR(100) DEFAULT 'External Ingest System',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
       `);
-      console.log('🌱 Seeded default admin & asisten users in PostgreSQL');
-    }
 
-    // Seed default kelas if empty
-    const checkKelas = await client.query('SELECT COUNT(*) FROM kelas_pembekalan');
-    if (parseInt(checkKelas.rows[0].count, 10) === 0) {
-      for (const k of initialKelas) {
-        const res = await client.query(
-          'INSERT INTO kelas_pembekalan (id, nama_kelas, deskripsi, kuota) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING RETURNING id',
-          [k.id, k.nama_kelas, k.deskripsi, k.kuota]
-        );
+      // Seed default users if empty
+      const checkUsers = await client.query('SELECT COUNT(*) FROM users');
+      if (parseInt(checkUsers.rows[0].count, 10) === 0) {
+        await client.query(`
+          INSERT INTO users (username, password, nama, role) VALUES 
+          ('admin', 'admin123', 'Administrator Pembekalan', 'admin'),
+          ('asisten', 'asisten123', 'Asisten Laboratorium', 'asisten')
+        `);
+        console.log('🌱 Seeded default admin & asisten users in PostgreSQL');
       }
-      for (const s of initialSesi) {
-        await client.query(
-          'INSERT INTO sesi_pembekalan (id, kelas_pembekalan_id, nama_sesi, tanggal, hari, jam_mulai, jam_selesai, ruangan, instruktur, asisten) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET tanggal = EXCLUDED.tanggal, asisten = EXCLUDED.asisten',
-          [s.id, s.kelas_pembekalan_id, s.nama_sesi, s.tanggal || null, s.hari, s.jam_mulai, s.jam_selesai, s.ruangan, s.instruktur, JSON.stringify(s.asisten || [])]
-        );
-      }
-      for (const m of initialMahasiswa) {
-        await client.query(
-          'INSERT INTO mahasiswa (id, npm, nama, kelas, kelas_pembekalan_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (npm) DO NOTHING',
-          [m.id, m.npm, m.nama, m.kelas, m.kelas_pembekalan_id]
-        );
-      }
-      console.log('🌱 Seeded default kelas, sesi, and mahasiswa in PostgreSQL');
-    }
 
-    client.release();
-  } catch (err: any) {
-    console.warn('⚠️ Could not connect to external PostgreSQL server:', err.message);
-    console.log('ℹ️ Running in resilient high-performance application store mode (with full PostgreSQL schema and Docker Compose ready)');
-    isPostgresConnected = false;
+      // Seed default kelas if empty
+      const checkKelas = await client.query('SELECT COUNT(*) FROM kelas_pembekalan');
+      if (parseInt(checkKelas.rows[0].count, 10) === 0) {
+        for (const k of initialKelas) {
+          await client.query(
+            'INSERT INTO kelas_pembekalan (id, nama_kelas, deskripsi, kuota) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
+            [k.id, k.nama_kelas, k.deskripsi, k.kuota]
+          );
+        }
+        for (const s of initialSesi) {
+          await client.query(
+            'INSERT INTO sesi_pembekalan (id, kelas_pembekalan_id, nama_sesi, tanggal, hari, jam_mulai, jam_selesai, ruangan, instruktur, asisten) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO UPDATE SET tanggal = EXCLUDED.tanggal, asisten = EXCLUDED.asisten',
+            [s.id, s.kelas_pembekalan_id, s.nama_sesi, s.tanggal || null, s.hari, s.jam_mulai, s.jam_selesai, s.ruangan, s.instruktur, JSON.stringify(s.asisten || [])]
+          );
+        }
+        for (const m of initialMahasiswa) {
+          await client.query(
+            'INSERT INTO mahasiswa (id, npm, nama, kelas, kelas_pembekalan_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (npm) DO NOTHING',
+            [m.id, m.npm, m.nama, m.kelas, m.kelas_pembekalan_id]
+          );
+        }
+        console.log('🌱 Seeded default kelas, sesi, and mahasiswa in PostgreSQL');
+      }
+
+      // Sinkronisasi sequences agar auto-increment ID baru tidak bentrok dengan ID seed
+      await client.query(`
+        SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1));
+        SELECT setval('kelas_pembekalan_id_seq', COALESCE((SELECT MAX(id) FROM kelas_pembekalan), 1));
+        SELECT setval('sesi_pembekalan_id_seq', COALESCE((SELECT MAX(id) FROM sesi_pembekalan), 1));
+        SELECT setval('mahasiswa_id_seq', COALESCE((SELECT MAX(id) FROM mahasiswa), 1));
+      `);
+
+      client.release();
+      return true;
+    } catch (err: any) {
+      lastDbError = err.message;
+      console.warn(`⚠️ [Percobaan ${attempt}/${retries}] Gagal menghubungkan ke PostgreSQL:`, err.message);
+      if (attempt < retries) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      } else {
+        console.warn('⚠️ Tidak dapat terhubung ke server PostgreSQL.');
+        console.log('ℹ️ Berjalan dalam mode cadangan memori (In-Memory Fallback).');
+        isPostgresConnected = false;
+      }
+    }
   }
+
+  return false;
 }
+
+// Background auto-reconnect berkala jika PostgreSQL belum terhubung
+setInterval(async () => {
+  if (!isPostgresConnected) {
+    try {
+      if (!pool) {
+        pool = new Pool(poolConfig);
+      }
+      const client = await pool.connect();
+      isPostgresConnected = true;
+      lastDbError = null;
+      console.log('✅ PostgreSQL Auto-Reconnect Berhasil terhubung!');
+      client.release();
+    } catch (err: any) {
+      lastDbError = err.message;
+    }
+  }
+}, 12000);
 
 export function getDatabaseStatus() {
   return {
     isPostgresConnected,
-    mode: isPostgresConnected ? 'PostgreSQL Active (Live Connection)' : 'PostgreSQL Schema Engine (Ready for Docker Compose)',
+    mode: isPostgresConnected ? 'PostgreSQL Active (Live Connection)' : 'In-Memory Fallback (PostgreSQL Tidak Terhubung)',
     host: poolConfig.host,
+    port: poolConfig.port,
     database: poolConfig.database,
+    user: poolConfig.user,
+    lastError: lastDbError,
   };
 }
 
@@ -529,8 +574,9 @@ export async function addMahasiswa(data: { npm: string; nama: string; kelas: str
         ...inserted,
         nama_kelas_pembekalan: k.rows[0]?.nama_kelas,
       };
-    } catch (e) {
-      console.error('PostgreSQL insert error, falling back:', e);
+    } catch (e: any) {
+      console.error('❌ PostgreSQL insert error in addMahasiswa:', e);
+      throw new Error(`Gagal menyimpan ke database PostgreSQL: ${e.message}`);
     }
   }
 
@@ -562,14 +608,15 @@ export async function updateMahasiswa(id: number, data: { npm: string; nama: str
         `UPDATE mahasiswa SET npm = $1, nama = $2, kelas = $3, kelas_pembekalan_id = $4, updated_at = NOW() WHERE id = $5 RETURNING *`,
         [data.npm, data.nama, data.kelas, data.kelas_pembekalan_id, id]
       );
-      if (res.rows.length === 0) throw new Error('Mahasiswa tidak ditemukan');
+      if (res.rows.length === 0) throw new Error('Mahasiswa tidak ditemukan di database');
       const k = await pool.query('SELECT nama_kelas FROM kelas_pembekalan WHERE id = $1', [data.kelas_pembekalan_id]);
       return {
         ...res.rows[0],
         nama_kelas_pembekalan: k.rows[0]?.nama_kelas,
       };
-    } catch (e) {
-      console.error('PostgreSQL update error, falling back:', e);
+    } catch (e: any) {
+      console.error('❌ PostgreSQL update error in updateMahasiswa:', e);
+      throw new Error(`Gagal mengubah data di database PostgreSQL: ${e.message}`);
     }
   }
 
@@ -595,8 +642,9 @@ export async function deleteMahasiswa(id: number): Promise<boolean> {
     try {
       const res = await pool.query('DELETE FROM mahasiswa WHERE id = $1 RETURNING id', [id]);
       return (res.rowCount ?? 0) > 0;
-    } catch (e) {
-      console.error('PostgreSQL delete error, falling back:', e);
+    } catch (e: any) {
+      console.error('❌ PostgreSQL delete error in deleteMahasiswa:', e);
+      throw new Error(`Gagal menghapus data di database PostgreSQL: ${e.message}`);
     }
   }
 
@@ -697,8 +745,9 @@ export async function createKelasReferensi(data: {
       } finally {
         client.release();
       }
-    } catch (e) {
-      console.error('PostgreSQL create referensi error, falling back:', e);
+    } catch (e: any) {
+      console.error('❌ PostgreSQL create referensi error:', e);
+      throw new Error(`Gagal menyimpan kelas referensi ke database PostgreSQL: ${e.message}`);
     }
   }
 
@@ -792,8 +841,9 @@ export async function updateKelasReferensi(
       } finally {
         client.release();
       }
-    } catch (e) {
-      console.error('PostgreSQL update referensi error, falling back:', e);
+    } catch (e: any) {
+      console.error('❌ PostgreSQL update referensi error:', e);
+      throw new Error(`Gagal memperbarui kelas referensi di database PostgreSQL: ${e.message}`);
     }
   }
 
