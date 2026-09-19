@@ -6,12 +6,12 @@ Aplikasi web manajemen data mahasiswa pembekalan, konfigurasi referensi kelas da
 
 ## 👥 Pengguna & Hak Akses (Role)
 
-Sistem menyediakan 2 (dua) akun pengguna:
+Sistem menyediakan 2 (dua) akun pengguna terdaftar:
 
 | Username | Password | Peran (Role) | Hak Akses |
 | :--- | :--- | :--- | :--- |
 | **admin** | `admin123` | **Administrator** | **Akses Penuh**: Tambah, Ubah, Hapus Mahasiswa, Import Excel, Konfigurasi Referensi Kelas & Sesi, Monitoring, Unduh PDF/Excel, dan Riwayat. |
-| **asisten** | `asisten123` | **Asisten** | **Mode Lihat Saja (Read-Only)**: Hanya melihat data mahasiswa, referensi kelas, live monitoring, tugas mahasiswa, dan riwayat. |
+| **asisten** | `asisten123` | **Asisten** | **Mode Lihat Saja (Read-Only)**: Hanya dapat melihat data mahasiswa, referensi kelas, live monitoring, daftar tugas mahasiswa, dan riwayat login. |
 
 > **Keamanan:** Halaman utama portal adalah halaman Login. Setiap akses harus didahului autentikasi login.
 
@@ -19,414 +19,46 @@ Sistem menyediakan 2 (dua) akun pengguna:
 
 ## 🚀 Fitur & Modul Aplikasi
 
-1. **Autentikasi & Otorisasi Berbasis Peran:**
-   - Validasi akun admin dan asisten dengan token autentikasi.
-   - Proteksi endpoint API mutasi data (hanya dapat dieksekusi oleh role `admin`).
-
-2. **Manajemen Data Mahasiswa:**
-   - Atribut: **NPM**, **Nama Mahasiswa**, **Kelas Reguler**, **Kelas Pembekalan Terdaftar**.
-   - CRUD data mahasiswa, pencarian cepat, dan filter kelas.
-   - Import massal via file Excel (`.xlsx` / `.xls`) dengan template siap unduh.
-   - Ekspor data mahasiswa ke Excel.
-
-3. **Referensi Kelas & Sesi Pembekalan Fleksibel:**
-   - Nama Kelas, Deskripsi, dan Kuota Mahasiswa.
-   - **Sesi Pembekalan:** Nama Sesi, **Tanggal Pelaksanaan**, Hari, Jam Mulai, Jam Selesai (WIB), Ruangan/Lab, Instruktur, dan hingga 4 Asisten per sesi.
-   - Cetak Jadwal resmi ke format **PDF** dan **Excel (.xlsx)** baik per kelas maupun rekap seluruh kelas.
-
-4. **Live Monitoring Mahasiswa Aktif (Sesi Hari Ini):**
-   - Menampilkan mahasiswa yang sedang aktif login khusus pada **jadwal sesi hari ini**.
-   - Indikator online real-time, waktu login, durasi aktif, dan alamat IP.
-   - Sinkronisasi otomatis per 5 detik.
-
-5. **Monitoring Pengumpulan Tugas Mahasiswa:**
-   - Menampilkan daftar mahasiswa yang telah mengumpulkan tugas per sesi pembekalan dengan data terstruktur: **NPM, Nama Mahasiswa, Kelas, dan Sesi**.
-   - Ekspor data pengumpulan tugas ke Excel (`.xlsx`).
-
-6. **Riwayat Akses Login:**
-   - Log aktivitas login dan logout dengan filter rentang tanggal (*Hari Ini, 7 Hari, 30 Hari, Semua*), status sesi, dan pencarian NPM/nama.
-   - Ekspor riwayat ke Excel.
+1. **Autentikasi Pengguna & Role Guard:** Validasi akun admin dan asisten dengan pengamanan sesi login.
+2. **Manajemen Data Mahasiswa:** CRUD data mahasiswa (NPM, Nama, Kelas Reguler, Kelas Pembekalan), import massal via Excel (.xlsx), dan ekspor data.
+3. **Referensi Kelas & Sesi Pembekalan:** Konfigurasi kelas dan jadwal sesi dinamis (Nama Sesi, **Tanggal Pelaksanaan**, Hari, Jam Mulai-Selesai, Ruangan, Instruktur, dan Asisten), serta cetak jadwal ke PDF & Excel.
+4. **Live Monitoring Mahasiswa Aktif:** Pemantauan real-time mahasiswa yang sedang login khusus pada jadwal sesi hari ini.
+5. **Monitoring Pengumpulan Tugas:** Daftar mahasiswa yang telah mengumpulkan tugas per sesi pembekalan (NPM, Nama Mahasiswa, Kelas, Sesi) dengan fitur ekspor ke Excel.
+6. **Riwayat Akses Login:** Log aktivitas login/logout dengan filter rentang tanggal, status, pencarian, dan ekspor ke Excel.
 
 ---
 
-## 📖 Dokumentasi REST API
+## 📡 Dokumentasi REST API Integrasi Sistem Eksternal
 
-Semua endpoint API beralamat dasar (Base URL):
+Endpoint ini dirancang khusus untuk menghubungkan sistem pihak luar (seperti aplikasi gerbang lab/RFID presensi, portal kampus, LMS Moodle, Google Classroom, bot auto-grader, atau webhook Git) ke portal ini.
+
+**Base URL:**
 ```text
 http://localhost:3000
 ```
 
-Header autentikasi untuk endpoint yang memerlukan hak akses Admin:
-```http
-Authorization: Bearer <token>
-# atau
-x-auth-token: <token>
-```
-
 ---
 
-### 1. Autentikasi & Pemeriksaan Sistem
+### 1. Ingest Event Login Mahasiswa (Presensi Sesi Live)
 
-#### 1.1 Login Pengguna
-- **Method:** `POST`
-- **Endpoint:** `/api/login`
-- **Headers:** `Content-Type: application/json`
-- **Request Body:**
-```json
-{
-  "username": "admin",
-  "password": "admin123"
-}
-```
-- **Response Sukses (200 OK):**
-```json
-{
-  "success": true,
-  "user": {
-    "id": "u-admin",
-    "username": "admin",
-    "nama": "Administrator Portal",
-    "role": "admin"
-  },
-  "token": "token-admin-1726700000000",
-  "message": "Selamat datang, Administrator Portal (ADMIN)"
-}
-```
-
-#### 1.2 Health Check & Status Database
-- **Method:** `GET`
-- **Endpoint:** `/api/health`
-- **Response Sukses (200 OK):**
-```json
-{
-  "status": "ok",
-  "timestamp": "2026-09-19T05:15:00.000Z",
-  "database": {
-    "connected": true,
-    "adapter": "postgresql",
-    "host": "localhost",
-    "database": "portal_pembekalan"
-  }
-}
-```
-
----
-
-### 2. Manajemen Data Mahasiswa
-
-#### 2.1 Ambil Semua Data Mahasiswa
-- **Method:** `GET`
-- **Endpoint:** `/api/mahasiswa`
-- **Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "npm": "50421001",
-      "nama": "Aditya Pratama",
-      "kelas": "4IA01",
-      "kelas_pembekalan_id": 1,
-      "nama_kelas_pembekalan": "Web Development & Cloud Computing",
-      "created_at": "2026-09-01T08:00:00.000Z"
-    }
-  ]
-}
-```
-
-#### 2.2 Tambah Mahasiswa Baru (Admin Only)
-- **Method:** `POST`
-- **Endpoint:** `/api/mahasiswa`
-- **Headers:** `Content-Type: application/json`, `Authorization: Bearer <token>`
-- **Request Body:**
-```json
-{
-  "npm": "50421050",
-  "nama": "Budi Santoso",
-  "kelas": "4IA02",
-  "kelas_pembekalan_id": 1
-}
-```
-
-#### 2.3 Ubah Data Mahasiswa (Admin Only)
-- **Method:** `PUT`
-- **Endpoint:** `/api/mahasiswa/:id`
-- **Headers:** `Content-Type: application/json`, `Authorization: Bearer <token>`
-- **Request Body:**
-```json
-{
-  "npm": "50421050",
-  "nama": "Budi Santoso, S.Kom",
-  "kelas": "4IA02",
-  "kelas_pembekalan_id": 2
-}
-```
-
-#### 2.4 Hapus Mahasiswa (Admin Only)
-- **Method:** `DELETE`
-- **Endpoint:** `/api/mahasiswa/:id`
-- **Headers:** `Authorization: Bearer <token>`
-
-#### 2.5 Import Massal Data Mahasiswa via JSON / Excel Data (Admin Only)
-- **Method:** `POST`
-- **Endpoint:** `/api/mahasiswa/bulk-import`
-- **Headers:** `Content-Type: application/json`, `Authorization: Bearer <token>`
-- **Request Body:**
-```json
-{
-  "items": [
-    {
-      "npm": "50421060",
-      "nama": "Citra Lestari",
-      "kelas": "4IA03",
-      "kelas_pembekalan": "Web Development & Cloud Computing"
-    },
-    {
-      "npm": "50421061",
-      "nama": "Dedi Kurniawan",
-      "kelas": "4IA03",
-      "kelas_pembekalan": "Data Science & Machine Learning"
-    }
-  ]
-}
-```
-
-#### 2.6 Unduh Template Excel Mahasiswa
-- **Method:** `GET`
-- **Endpoint:** `/api/mahasiswa/template-xlsx`
-- **Response:** File biner Excel `template_data_mahasiswa.xlsx`
-
----
-
-### 3. Referensi Kelas & Sesi Pembekalan
-
-#### 3.1 Ambil Semua Referensi Kelas & Jadwal Sesi
-- **Method:** `GET`
-- **Endpoint:** `/api/referensi-kelas`
-- **Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": 1,
-      "nama_kelas": "Web Development & Cloud Computing",
-      "deskripsi": "Pelatihan pembuatan arsitektur web modern fullstack dan deployment cloud.",
-      "kuota": 40,
-      "sesi_list": [
-        {
-          "id": 101,
-          "kelas_pembekalan_id": 1,
-          "nama_sesi": "Sesi 1: REST API & Cloud Ingress",
-          "tanggal": "2026-09-22",
-          "hari": "Senin",
-          "jam_mulai": "08:30",
-          "jam_selesai": "11:30",
-          "ruangan": "Lab Komputer 3",
-          "instruktur": "Dr. Ir. Hendra Wijaya, M.Kom",
-          "asisten": ["Rian Maulana", "Anisa Rahma"]
-        }
-      ]
-    }
-  ]
-}
-```
-
-#### 3.2 Tambah Referensi Kelas & Sesi (Admin Only)
-- **Method:** `POST`
-- **Endpoint:** `/api/referensi-kelas`
-- **Headers:** `Content-Type: application/json`, `Authorization: Bearer <token>`
-- **Request Body:**
-```json
-{
-  "nama_kelas": "Mobile App Development",
-  "deskripsi": "Pengembangan aplikasi Flutter & React Native untuk industri.",
-  "kuota": 35,
-  "sesi_list": [
-    {
-      "nama_sesi": "Sesi 1: Dasar Widget & State Management",
-      "tanggal": "2026-09-25",
-      "hari": "Kamis",
-      "jam_mulai": "09:00",
-      "jam_selesai": "12:00",
-      "ruangan": "Lab Mobile 2",
-      "instruktur": "Ahmad Fauzi, M.T.",
-      "asisten": ["Doni", "Tiara"]
-    }
-  ]
-}
-```
-
-#### 3.3 Perbarui Referensi Kelas & Sesi (Admin Only)
-- **Method:** `PUT`
-- **Endpoint:** `/api/referensi-kelas/:id`
-- **Headers:** `Content-Type: application/json`, `Authorization: Bearer <token>`
-
-#### 3.4 Hapus Referensi Kelas (Admin Only)
-- **Method:** `DELETE`
-- **Endpoint:** `/api/referensi-kelas/:id`
-- **Headers:** `Authorization: Bearer <token>`
-
-#### 3.5 Ekspor Rekap Seluruh Kelas ke Excel
-- **Method:** `GET`
-- **Endpoint:** `/api/referensi-kelas/export-excel`
-
-#### 3.6 Ekspor Satu Kelas ke Excel
-- **Method:** `GET`
-- **Endpoint:** `/api/referensi-kelas/:id/export-excel`
-
----
-
-### 4. Live Monitoring Mahasiswa Aktif (Sesi Hari Ini)
-
-#### 4.1 Ambil Data Mahasiswa Sedang Aktif Hari Ini
-- **Method:** `GET`
-- **Endpoint:** `/api/monitoring/live`
-- **Response (200 OK):**
-```json
-{
-  "success": true,
-  "todayDayName": "Jumat",
-  "todayDate": "2026-09-18",
-  "todaySessions": [
-    {
-      "id": 105,
-      "nama_sesi": "Sesi 1: Cloud Native & Containerization",
-      "tanggal": "2026-09-18",
-      "hari": "Jumat",
-      "jam_mulai": "08:00",
-      "jam_selesai": "11:00",
-      "ruangan": "Lab Jaringan"
-    }
-  ],
-  "activeList": [
-    {
-      "npm": "50421001",
-      "nama": "Aditya Pratama",
-      "kelas": "4IA01",
-      "nama_kelas_pembekalan": "Web Development & Cloud Computing",
-      "nama_sesi": "Sesi 1: Cloud Native & Containerization",
-      "ip_address": "192.168.1.45",
-      "waktu_login": "2026-09-18T08:15:30.000Z",
-      "durasi_menit": 45,
-      "status": "online"
-    }
-  ]
-}
-```
-
-#### 4.2 Simulasi Login/Logout Mahasiswa dari UI
-- **Method:** `POST`
-- **Endpoint:** `/api/monitoring/simulate`
-- **Request Body:**
-```json
-{
-  "action": "login",
-  "npm": "50421001"
-}
-```
-
----
-
-### 5. Riwayat Akses & Log Login Mahasiswa
-
-#### 5.1 Ambil Daftar Riwayat Login
-- **Method:** `GET`
-- **Endpoint:** `/api/riwayat-login`
-- **Query Parameters:**
-  - `startDate` (opsional, format: `YYYY-MM-DD`): Tanggal mulai rentang.
-  - `endDate` (opsional, format: `YYYY-MM-DD`): Tanggal selesai rentang.
-  - `search` (opsional): Pencarian nama atau NPM.
-  - `status` (opsional): `online` atau `logout`.
-  - `kelas` (opsional): Nama kelas reguler (misal: `4IA01`).
-- **Response (200 OK):**
-```json
-{
-  "success": true,
-  "count": 1,
-  "data": [
-    {
-      "id": 501,
-      "npm": "50421001",
-      "nama": "Aditya Pratama",
-      "kelas": "4IA01",
-      "nama_kelas_pembekalan": "Web Development & Cloud Computing",
-      "nama_sesi": "Sesi 1: Cloud Native",
-      "ip_address": "192.168.1.45",
-      "waktu_login": "2026-09-18T08:15:30.000Z",
-      "waktu_logout": "2026-09-18T10:45:00.000Z",
-      "durasi_menit": 150,
-      "status": "logout"
-    }
-  ]
-}
-```
-
-#### 5.2 Ekspor Riwayat Login ke Excel
-- **Method:** `GET`
-- **Endpoint:** `/api/riwayat-login/export?startDate=2026-09-01&endDate=2026-09-18`
-
----
-
-### 6. Monitoring Pengumpulan Tugas Mahasiswa
-
-#### 6.1 Ambil Daftar Mahasiswa yang Sudah Mengumpulkan Tugas
-- **Method:** `GET`
-- **Endpoint:** `/api/monitoring/tugas`
-- **Query Parameters:**
-  - `kelas_pembekalan_id` (opsional): ID kelas pembekalan.
-  - `nama_sesi` (opsional): Nama sesi pembekalan.
-  - `kelas_reguler` (opsional): Filter kelas mahasiswa (misal: `4IA01`).
-  - `search` (opsional): Pencarian NPM atau nama.
-- **Response (200 OK):**
-```json
-{
-  "success": true,
-  "total": 3,
-  "data": [
-    {
-      "id": 1,
-      "npm": "50421001",
-      "nama": "Aditya Pratama",
-      "kelas": "4IA01",
-      "nama_kelas_pembekalan": "Web Development & Cloud Computing",
-      "nama_sesi": "Sesi 1: Dasar REST API & Database Design",
-      "waktu_pengumpulan": "2026-09-18T10:15:00.000Z"
-    }
-  ]
-}
-```
-
-#### 6.2 Ekspor Daftar Pengumpulan Tugas ke Excel
-- **Method:** `GET`
-- **Endpoint:** `/api/monitoring/tugas/export`
-- **Response:** File Excel `.xlsx` berisi daftar mahasiswa yang mengumpulkan (kolom: No, NPM, Nama Mahasiswa, Kelas, Sesi).
-
----
-
-### 7. REST API Ingest Sistem Eksternal (Webhook)
-
-Endpoint ini dirancang khusus untuk dipanggil oleh sistem eksternal (aplikasi gerbang lab, fingerprint/RFID, LMS Moodle, Google Classroom, atau webhook bot CI/CD).
-
-#### 7.1 Ingest Event Login Mahasiswa (Presensi Sesi)
-Mencatat mahasiswa masuk/keluar ke sesi pembekalan hari ini.
+Digunakan oleh aplikasi presensi eksternal (aplikasi komputer lab, reader RFID, gerbang laboratorium, atau portal kampus) untuk mencatat mahasiswa yang login atau logout secara real-time pada sesi pembekalan yang sedang berlangsung.
 
 - **Method:** `POST`
 - **Endpoint:** `/api/external/login-event`
 - **Headers:** `Content-Type: application/json`
-- **Parameter Payload JSON:**
-  | Parameter | Tipe | Wajib? | Keterangan |
-  | :--- | :--- | :--- | :--- |
-  | `npm` | String | **Ya** | NPM mahasiswa yang melakukan login |
-  | `action` | String | Tidak | `login` (default) atau `logout` |
-  | `nama` | String | Tidak | Nama mahasiswa jika sudah diketahui |
-  | `kelas` | String | Tidak | Kelas reguler mahasiswa (contoh: `4IA01`) |
-  | `nama_sesi` | String | Tidak | Nama sesi terkait |
-  | `ip_address` | String | Tidak | IP perangkat mahasiswa / komputer lab |
-  | `user_agent` | String | Tidak | Identitas aplikasi eksternal / browser |
 
-- **Contoh Payload JSON:**
+#### Parameter Payload (JSON):
+| Parameter | Tipe | Status | Keterangan |
+| :--- | :--- | :--- | :--- |
+| `npm` | String | **Wajib** | Nomor Pokok Mahasiswa |
+| `action` | String | Opsional | `login` (default) atau `logout` |
+| `nama` | String | Opsional | Nama lengkap mahasiswa (jika tersedia di sistem luar) |
+| `kelas` | String | Opsional | Kelas reguler mahasiswa (contoh: `4IA01`) |
+| `nama_sesi` | String | Opsional | Nama sesi pembekalan yang sedang diikuti |
+| `ip_address` | String | Opsional | Alamat IP perangkat/komputer lab yang digunakan |
+| `user_agent` | String | Opsional | Identitas perangkat atau aplikasi klien |
+
+#### Contoh Request Body (JSON):
 ```json
 {
   "npm": "50421001",
@@ -434,11 +66,11 @@ Mencatat mahasiswa masuk/keluar ke sesi pembekalan hari ini.
   "nama": "Aditya Pratama",
   "kelas": "4IA01",
   "ip_address": "192.168.1.105",
-  "user_agent": "Lab-Gate-Reader-v2.1"
+  "user_agent": "Lab-Komputer-Gate/1.0"
 }
 ```
 
-- **Contoh Request cURL:**
+#### Contoh Request (cURL):
 ```bash
 curl -X POST http://localhost:3000/api/external/login-event \
   -H "Content-Type: application/json" \
@@ -451,40 +83,59 @@ curl -X POST http://localhost:3000/api/external/login-event \
   }'
 ```
 
-- **Response Sukses (200 OK):**
+#### Contoh Respon Berhasil (200 OK):
 ```json
 {
   "success": true,
   "message": "Login mahasiswa 50421001 (Aditya Pratama) berhasil dicatat.",
   "data": {
     "npm": "50421001",
+    "nama": "Aditya Pratama",
     "action": "login",
-    "waktu": "2026-09-18T22:15:00.000Z"
+    "waktu": "2026-09-19T08:15:00.000Z"
   }
 }
 ```
 
 ---
 
-#### 7.2 Ingest Pengumpulan Tugas Mahasiswa (Single Task Webhook)
-Mencatat mahasiswa yang telah mengumpulkan tugas per sesi pembekalan dari LMS (Moodle, Google Classroom, Git commit webhook, dsb).
+### 2. Ingest Pengumpulan Tugas & Nilai Mahasiswa (Single Task Webhook)
+
+Digunakan oleh LMS (Moodle, Google Classroom), sistem pengujian otomatis (*AutoGrader*), atau webhook Git saat mahasiswa telah mengumpulkan tugas pada sesi tertentu.
 
 - **Method:** `POST`
 - **Endpoint:** `/api/external/task-event`
 - **Headers:** `Content-Type: application/json`
-- **Parameter Payload JSON:**
-  | Parameter | Tipe | Wajib? | Keterangan |
-  | :--- | :--- | :--- | :--- |
-  | `npm` | String | **Ya** | NPM mahasiswa yang mengumpulkan tugas |
-  | `nama_sesi` | String | **Ya** | Nama sesi pembekalan yang relevan |
-  | `nama` | String | Tidak | Nama mahasiswa |
-  | `kelas` | String | Tidak | Kelas reguler mahasiswa (contoh: `4IA01`) |
-  | `judul_tugas` | String | Tidak | Judul atau nama file tugas |
-  | `waktu_pengumpulan`| String (ISO)| Tidak | Waktu pengumpulan (otomatis waktu sekarang jika kosong) |
-  | `tautan_tugas` | String | Tidak | URL repo Git atau link file di LMS |
-  | `external_source` | String | Tidak | Nama sistem pengirim (contoh: `LMS Moodle`, `GitLab`) |
 
-- **Contoh Request cURL:**
+#### Parameter Payload (JSON):
+| Parameter | Tipe | Status | Keterangan |
+| :--- | :--- | :--- | :--- |
+| `npm` | String | **Wajib** | Nomor Pokok Mahasiswa yang mengumpulkan tugas |
+| `nama_sesi` | String | **Wajib** | Nama sesi pembekalan terkait (contoh: `Sesi 1: Dasar REST API & Database Design`) |
+| `nama` | String | Opsional | Nama lengkap mahasiswa |
+| `kelas` | String | Opsional | Kelas reguler mahasiswa (contoh: `4IA01`) |
+| `judul_tugas` | String | Opsional | Judul penugasan / modul praktikum |
+| `nilai` | Number | Opsional | Nilai atau skor tugas mahasiswa (contoh: `88.5`) |
+| `status` | String | Opsional | Status pengumpulan (contoh: `sudah_dikumpulkan`, `dinilai`) |
+| `waktu_pengumpulan` | String (ISO) | Opsional | Waktu mahasiswa mengumpulkan tugas (otomatis saat ini jika kosong) |
+| `tautan_tugas` | String | Opsional | Tautan berkas penugasan atau repository Git |
+| `catatan_instruktur`| String | Opsional | Catatan atau umpan balik pengoreksian |
+| `external_source` | String | Opsional | Nama sistem luar (contoh: `LMS Moodle`, `AutoGrader CI`) |
+
+#### Contoh Request Body (JSON):
+```json
+{
+  "npm": "50421001",
+  "nama": "Aditya Pratama",
+  "kelas": "4IA01",
+  "nama_sesi": "Sesi 1: Dasar REST API & Database Design",
+  "nilai": 90,
+  "judul_tugas": "Implementasi RESTful API & Schema PostgreSQL",
+  "external_source": "LMS Moodle Lab"
+}
+```
+
+#### Contoh Request (cURL):
 ```bash
 curl -X POST http://localhost:3000/api/external/task-event \
   -H "Content-Type: application/json" \
@@ -493,11 +144,12 @@ curl -X POST http://localhost:3000/api/external/task-event \
     "nama": "Aditya Pratama",
     "kelas": "4IA01",
     "nama_sesi": "Sesi 1: Dasar REST API & Database Design",
+    "nilai": 90,
     "external_source": "LMS Moodle Lab"
   }'
 ```
 
-- **Response Sukses (200 OK):**
+#### Contoh Respon Berhasil (200 OK):
 ```json
 {
   "success": true,
@@ -507,20 +159,23 @@ curl -X POST http://localhost:3000/api/external/task-event \
     "nama": "Aditya Pratama",
     "kelas": "4IA01",
     "nama_sesi": "Sesi 1: Dasar REST API & Database Design",
-    "waktu_pengumpulan": "2026-09-18T22:15:00.000Z"
+    "nilai": 90,
+    "waktu_pengumpulan": "2026-09-19T10:30:00.000Z"
   }
 }
 ```
 
 ---
 
-#### 7.3 Ingest Pengumpulan Tugas Massal (Batch Task Webhook)
-Mencatat banyak data pengumpulan tugas sekaligus (misalnya sinkronisasi berkala dari cron job LMS).
+### 3. Ingest Pengumpulan Tugas & Nilai Massal (Batch Sync)
+
+Digunakan untuk sinkronisasi berkala (misalnya melalui cron job harian atau sinkronisasi terjadwal dari database LMS luar) untuk mengirim banyak data pengumpulan tugas dan nilai sekaligus dalam satu permintaan.
 
 - **Method:** `POST`
 - **Endpoint:** `/api/external/tasks-batch`
 - **Headers:** `Content-Type: application/json`
-- **Request Body:**
+
+#### Contoh Request Body (JSON):
 ```json
 {
   "tasks": [
@@ -528,19 +183,21 @@ Mencatat banyak data pengumpulan tugas sekaligus (misalnya sinkronisasi berkala 
       "npm": "50421001",
       "nama": "Aditya Pratama",
       "kelas": "4IA01",
-      "nama_sesi": "Sesi 1: Dasar REST API & Database Design"
+      "nama_sesi": "Sesi 1: Dasar REST API & Database Design",
+      "nilai": 88
     },
     {
       "npm": "50421002",
       "nama": "Annisa Rahmawati",
       "kelas": "4IA01",
-      "nama_sesi": "Sesi 1: Dasar REST API & Database Design"
+      "nama_sesi": "Sesi 1: Dasar REST API & Database Design",
+      "nilai": 95
     }
   ]
 }
 ```
 
-- **Response Sukses (200 OK):**
+#### Contoh Respon Berhasil (200 OK):
 ```json
 {
   "success": true,
@@ -561,7 +218,7 @@ docker compose up --build -d
 
 - **Aplikasi Web:** Buka [http://localhost:3000](http://localhost:3000)
 - **Database PostgreSQL:** Port `5432`, Database: `portal_pembekalan`, User: `postgres`, Password: `postgres_password`.
-- Inisialisasi skema tabel otomatis dijalankan dari `init.sql`.
+- Skema tabel diinisialisasi otomatis dari file `init.sql`.
 
 Untuk mematikan container:
 ```bash
