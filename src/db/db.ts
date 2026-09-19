@@ -1,4 +1,5 @@
 import pg from 'pg';
+import crypto from 'crypto';
 import {
   Mahasiswa,
   KelasPembekalan,
@@ -12,6 +13,22 @@ import {
 } from '../types.ts';
 
 const { Pool } = pg;
+
+/**
+ * Menghasilkan hash SHA-1 dari string password untuk penyimpanan yang aman.
+ * Format output berupa string hexadecimal 40-karakter.
+ */
+export function hashPasswordSha1(password: string): string {
+  return crypto.createHash('sha1').update(password).digest('hex');
+}
+
+export interface UserRecord {
+  id: number;
+  username: string;
+  password_hash: string;
+  nama: string;
+  role: 'admin' | 'asisten';
+}
 
 // Konfigurasi koneksi PostgreSQL
 const poolConfig: pg.PoolConfig = {
@@ -34,6 +51,26 @@ let lastDbError: string | null = null;
 const initialUsers: User[] = [
   { id: 1, username: 'admin', nama: 'Administrator Pembekalan', role: 'admin' },
   { id: 2, username: 'asisten', nama: 'Asisten Laboratorium', role: 'asisten' },
+];
+
+// Kredensial dengan password yang di-hash menggunakan SHA-1
+// admin: 'admin123' -> hash: 'f865b53623b121fd34ee5426c792e5c33af8c227'
+// asisten: 'asisten123' -> hash: 'f745837ba7cd22623cb736bef901235e9f492bb8'
+const initialUserRecords: UserRecord[] = [
+  {
+    id: 1,
+    username: 'admin',
+    password_hash: hashPasswordSha1('admin123'),
+    nama: 'Administrator Pembekalan',
+    role: 'admin',
+  },
+  {
+    id: 2,
+    username: 'asisten',
+    password_hash: hashPasswordSha1('asisten123'),
+    nama: 'Asisten Laboratorium',
+    role: 'asisten',
+  },
 ];
 
 const initialKelas: KelasPembekalan[] = [
@@ -196,6 +233,7 @@ const initialMahasiswa: Mahasiswa[] = [
 // In-memory store (active fallback when PostgreSQL container is not running locally in preview)
 export const memoryStore = {
   users: [...initialUsers],
+  userRecords: [...initialUserRecords],
   kelas: [...initialKelas],
   sesi: [...initialSesi],
   mahasiswa: [...initialMahasiswa],
@@ -445,15 +483,24 @@ export async function initializeDatabase(retries = 4, delayMs = 1500) {
         );
       `);
 
-      // Seed default users if empty
+      // Seed default users if empty (Password di-hash menggunakan SHA-1)
+      const adminHash = hashPasswordSha1('admin123');
+      const asistenHash = hashPasswordSha1('asisten123');
+
       const checkUsers = await client.query('SELECT COUNT(*) FROM users');
       if (parseInt(checkUsers.rows[0].count, 10) === 0) {
         await client.query(`
           INSERT INTO users (username, password, nama, role) VALUES 
-          ('admin', 'admin123', 'Administrator Pembekalan', 'admin'),
-          ('asisten', 'asisten123', 'Asisten Laboratorium', 'asisten')
+          ('admin', '${adminHash}', 'Administrator Pembekalan', 'admin'),
+          ('asisten', '${asistenHash}', 'Asisten Laboratorium', 'asisten')
         `);
-        console.log('🌱 Seeded default admin & asisten users in PostgreSQL');
+        console.log('🌱 Seeded default admin & asisten users dengan hash SHA-1 di PostgreSQL');
+      } else {
+        // Migrasi otomatis jika database sebelumnya menyimpan password plaintext
+        await client.query(`
+          UPDATE users SET password = '${adminHash}' WHERE username = 'admin' AND (password = 'admin123' OR password = 'admin');
+          UPDATE users SET password = '${asistenHash}' WHERE username = 'asisten' AND (password = 'asisten123' OR password = 'asisten');
+        `);
       }
 
       // Seed default kelas if empty
@@ -534,6 +581,142 @@ export function getDatabaseStatus() {
     user: poolConfig.user,
     lastError: lastDbError,
   };
+}
+
+/**
+ * Otentikasi pengguna menggunakan verifikasi hash SHA-1.
+ * Password input di-hash dengan SHA-1 sebelum dicocokkan dengan nilai di tabel users.
+ */
+export async function authenticateUser(
+  username: string,
+  plainPassword: string
+): Promise<{ success: boolean; user?: User; error?: string }> {
+  const trimmedUsername = username.trim().toLowerCase();
+  const inputHash = hashPasswordSha1(plainPassword);
+
+  // 1. Verifikasi dengan PostgreSQL jika terhubung
+  if (isPostgresConnected && pool) {
+    try {
+      const res = await pool.query(
+        'SELECT id, username, password, nama, role, created_at FROM users WHERE LOWER(username) = $1',
+        [trimmedUsername]
+      );
+
+      if (res.rows.length === 0) {
+        return { success: false, error: 'Username tidak ditemukan di database.' };
+      }
+
+      const userRow = res.rows[0];
+      const storedPassword = userRow.password;
+
+      // Cek kecocokan hash SHA-1 (atau fallback plaintext untuk database lama yang belum termigrasi)
+      const isMatch = storedPassword === inputHash || storedPassword === plainPassword;
+
+      if (!isMatch) {
+        return { success: false, error: 'Kata sandi salah.' };
+      }
+
+      // Jika password di PostgreSQL masih plaintext, upgrade langsung ke hash SHA-1
+      if (storedPassword !== inputHash) {
+        try {
+          await pool.query('UPDATE users SET password = $1 WHERE id = $2', [inputHash, userRow.id]);
+          console.log(`🔒 Password pengguna '${userRow.username}' telah di-upgrade ke hash SHA-1 di PostgreSQL`);
+        } catch (upgradeErr) {
+          console.warn('Gagal memperbarui password ke hash SHA-1:', upgradeErr);
+        }
+      }
+
+      return {
+        success: true,
+        user: {
+          id: userRow.id,
+          username: userRow.username,
+          nama: userRow.nama,
+          role: userRow.role,
+          created_at: userRow.created_at,
+        },
+      };
+    } catch (e: any) {
+      console.error('Error saat verifikasi login di PostgreSQL, beralih ke memori:', e);
+    }
+  }
+
+  // 2. Verifikasi dengan memoryStore jika PostgreSQL tidak terhubung
+  const record = memoryStore.userRecords.find(
+    (u) => u.username.toLowerCase() === trimmedUsername
+  );
+
+  if (!record) {
+    return { success: false, error: 'Username tidak ditemukan.' };
+  }
+
+  const isMemMatch = record.password_hash === inputHash || record.password_hash === plainPassword;
+  if (!isMemMatch) {
+    return { success: false, error: 'Kata sandi salah.' };
+  }
+
+  return {
+    success: true,
+    user: {
+      id: record.id,
+      username: record.username,
+      nama: record.nama,
+      role: record.role,
+    },
+  };
+}
+
+/**
+ * Mengubah kata sandi pengguna dengan enkripsi hash SHA-1.
+ */
+export async function changeUserPassword(
+  userId: number,
+  oldPlainPassword: string,
+  newPlainPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!newPlainPassword || newPlainPassword.length < 4) {
+    return { success: false, error: 'Kata sandi baru minimal 4 karakter.' };
+  }
+
+  const oldHash = hashPasswordSha1(oldPlainPassword);
+  const newHash = hashPasswordSha1(newPlainPassword);
+
+  if (isPostgresConnected && pool) {
+    try {
+      const res = await pool.query('SELECT password FROM users WHERE id = $1', [userId]);
+      if (res.rows.length === 0) {
+        return { success: false, error: 'Pengguna tidak ditemukan di database.' };
+      }
+
+      const currentStored = res.rows[0].password;
+      if (currentStored !== oldHash && currentStored !== oldPlainPassword) {
+        return { success: false, error: 'Kata sandi lama salah.' };
+      }
+
+      await pool.query('UPDATE users SET password = $1 WHERE id = $2', [newHash, userId]);
+
+      // Update juga di memoryStore jika ada
+      const memRecord = memoryStore.userRecords.find((u) => u.id === userId);
+      if (memRecord) memRecord.password_hash = newHash;
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Error ubah password di PostgreSQL:', e);
+      throw new Error(`Gagal mengubah password di PostgreSQL: ${e.message}`);
+    }
+  }
+
+  const memRecord = memoryStore.userRecords.find((u) => u.id === userId);
+  if (!memRecord) {
+    return { success: false, error: 'Pengguna tidak ditemukan.' };
+  }
+
+  if (memRecord.password_hash !== oldHash && memRecord.password_hash !== oldPlainPassword) {
+    return { success: false, error: 'Kata sandi lama salah.' };
+  }
+
+  memRecord.password_hash = newHash;
+  return { success: true };
 }
 
 // Helpers for Data Operations

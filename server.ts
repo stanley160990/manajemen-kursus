@@ -19,6 +19,9 @@ import {
   getAllTugas,
   recordExternalTask,
   simulateExternalTaskSubmission,
+  authenticateUser,
+  changeUserPassword,
+  hashPasswordSha1,
   memoryStore,
 } from './src/db/db.ts';
 
@@ -46,41 +49,61 @@ async function startServer() {
   };
 
   // -------------------------------------------------------------
-  // API AUTENTIKASI (Hanya 2 User: Admin & Asisten)
+  // API AUTENTIKASI (Menggunakan Mekanisme Hash SHA-1)
   // -------------------------------------------------------------
-  app.post('/api/auth/login', (req: Request, res: Response) => {
+  app.post('/api/auth/login', async (req: Request, res: Response) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ success: false, error: 'Username dan password wajib diisi.' });
     }
 
-    const trimmedUser = String(username).trim().toLowerCase();
-    const user = memoryStore.users.find((u) => u.username.toLowerCase() === trimmedUser);
+    try {
+      const auth = await authenticateUser(String(username), String(password));
+      if (!auth.success || !auth.user) {
+        return res.status(401).json({
+          success: false,
+          error: auth.error || 'Username atau password salah.',
+        });
+      }
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        error: 'Username tidak ditemukan. Hanya ada 2 user: admin dan asisten.',
+      const token = `token-${auth.user.role}-${Date.now()}`;
+      return res.json({
+        success: true,
+        user: auth.user,
+        token,
+        message: `Selamat datang, ${auth.user.nama} (${auth.user.role.toUpperCase()})`,
       });
+    } catch (err: any) {
+      console.error('Error saat login:', err);
+      return res.status(500).json({ success: false, error: 'Terjadi kesalahan sistem saat proses otentikasi.' });
+    }
+  });
+
+  // -------------------------------------------------------------
+  // API UBAH PASSWORD (Hash SHA-1)
+  // -------------------------------------------------------------
+  app.post('/api/auth/change-password', async (req: Request, res: Response) => {
+    const { userId, oldPassword, newPassword } = req.body;
+
+    if (!userId || !oldPassword || !newPassword) {
+      return res.status(400).json({ success: false, error: 'User ID, password lama, dan password baru wajib diisi.' });
     }
 
-    // Verifikasi password sederhana untuk akun bawaan
-    const expectedPassword = user.role === 'admin' ? 'admin123' : 'asisten123';
-    if (password !== expectedPassword && password !== 'admin' && password !== 'asisten') {
-      return res.status(401).json({
-        success: false,
-        error: `Password salah untuk user ${user.username}. (Gunakan '${expectedPassword}')`,
-      });
-    }
+    try {
+      const result = await changeUserPassword(Number(userId), String(oldPassword), String(newPassword));
+      if (!result.success) {
+        return res.status(400).json({ success: false, error: result.error });
+      }
 
-    const token = `token-${user.role}-${Date.now()}`;
-    return res.json({
-      success: true,
-      user,
-      token,
-      message: `Selamat datang, ${user.nama} (${user.role.toUpperCase()})`,
-    });
+      return res.json({
+        success: true,
+        message: 'Kata sandi berhasil diperbarui dan disimpan dengan enkripsi hash SHA-1.',
+      });
+    } catch (err: any) {
+      console.error('Error ganti password:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Gagal mengubah kata sandi.' });
+    }
   });
 
   // -------------------------------------------------------------

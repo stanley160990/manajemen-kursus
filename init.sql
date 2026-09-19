@@ -94,11 +94,17 @@ CREATE INDEX IF NOT EXISTS idx_tugas_npm ON tugas_mahasiswa(npm);
 CREATE INDEX IF NOT EXISTS idx_tugas_status ON tugas_mahasiswa(status);
 CREATE INDEX IF NOT EXISTS idx_tugas_sesi ON tugas_mahasiswa(nama_sesi);
 
--- Seed Pengguna Awal: Admin dan Asisten
+-- Seed Pengguna Awal: Admin dan Asisten (Password tersimpan dalam hash SHA-1)
+-- admin: 'admin123' -> SHA1: 'f865b53623b121fd34ee5426c792e5c33af8c227'
+-- asisten: 'asisten123' -> SHA1: 'f745837ba7cd22623cb736bef901235e9f492bb8'
 INSERT INTO users (username, password, nama, role) VALUES 
-('admin', 'admin123', 'Administrator Pembekalan', 'admin'),
-('asisten', 'asisten123', 'Asisten Laboratorium', 'asisten')
+('admin', 'f865b53623b121fd34ee5426c792e5c33af8c227', 'Administrator Pembekalan', 'admin'),
+('asisten', 'f745837ba7cd22623cb736bef901235e9f492bb8', 'Asisten Laboratorium', 'asisten')
 ON CONFLICT (username) DO NOTHING;
+
+-- Migrasi password lama jika sebelumnya tersimpan sebagai plaintext 'admin123' / 'asisten123'
+UPDATE users SET password = 'f865b53623b121fd34ee5426c792e5c33af8c227' WHERE username = 'admin' AND (password = 'admin123' OR password = 'admin');
+UPDATE users SET password = 'f745837ba7cd22623cb736bef901235e9f492bb8' WHERE username = 'asisten' AND (password = 'asisten123' OR password = 'asisten');
 
 -- Seed Kelas Pembekalan
 INSERT INTO kelas_pembekalan (id, nama_kelas, deskripsi, kuota) VALUES
