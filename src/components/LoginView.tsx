@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types.ts';
-import { LogIn, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { LogIn, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface LoginViewProps {
   onLoginSuccess: (user: User, token: string) => void;
@@ -118,8 +118,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </form>
 
           <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-            <span className="flex items-center gap-1 text-slate-500 font-medium">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#525FE1]" /> Hash Sandi SHA-1
+            <span className="text-slate-500 font-medium">
+              2026 - Universitas Gunadarma
             </span>
             <span className="flex items-center gap-1 text-emerald-600 font-medium">
               <CheckCircle2 className="w-3.5 h-3.5" /> Siap Digunakan

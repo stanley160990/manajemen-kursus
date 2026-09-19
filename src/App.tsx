@@ -105,7 +105,7 @@ export default function App() {
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             <span>Sistem Monitoring & Presensi Pembekalan Mahasiswa</span>
             <span className="text-slate-300">|</span>
-            <span className="font-mono text-[11px] text-slate-400">PostgreSQL Engine</span>
+            <span className="text-[11px] text-slate-500 font-medium">Universitas Gunadarma</span>
           </div>
           <p className="text-slate-400 text-[11px]">
             User Aktif: <strong className="text-slate-700">{user.nama}</strong> ({user.role === 'admin' ? 'Hak Akses Penuh' : 'Mode Lihat Saja'})
